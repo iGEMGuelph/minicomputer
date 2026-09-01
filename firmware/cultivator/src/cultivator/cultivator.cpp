@@ -28,6 +28,7 @@
    SETTINGS:   edit config.h (pins, brightness, schedule).
    =========================================================================== */
 
+#include <Arduino.h>
 #include "config.h"
 #include "schedule.h"
 #include <Wire.h>
@@ -35,6 +36,12 @@
 
 static const int   PWM_MAX  = (1 << PWM_RES_BITS) - 1;   // 8 bits -> 255
 static const char* VERSION  = "0.2.0";
+
+// This board's installed arduino-esp32 core only has the old channel-based
+// LEDC API (ledcSetup/ledcAttachPin/ledcWrite-by-channel), not the newer
+// pin-based ledcAttach()/ledcWrite(pin, ...). Each colour gets its own channel.
+static const int RED_LED_CHANNEL  = 0;
+static const int BLUE_LED_CHANNEL = 1;
 
 RTC_DS3231 rtc;
 bool  rtcOk = false;                 // true if the DS3231 clock was found
@@ -60,8 +67,8 @@ unsigned long lastUpdate = 0;
 void applyOutputs(int redPct, int bluePct) {
   redPct  = constrain(redPct,  0, 100);
   bluePct = constrain(bluePct, 0, 100);
-  ledcWrite(RED_LED_PIN,  map(redPct,  0, 100, 0, PWM_MAX));
-  ledcWrite(BLUE_LED_PIN, map(bluePct, 0, 100, 0, PWM_MAX));
+  ledcWrite(RED_LED_CHANNEL,  map(redPct,  0, 100, 0, PWM_MAX));
+  ledcWrite(BLUE_LED_CHANNEL, map(bluePct, 0, 100, 0, PWM_MAX));
   currentRed  = redPct;
   currentBlue = bluePct;
 }
@@ -232,14 +239,13 @@ void handleSerial() {
 // ===========================================================================
 // SETUP  &  LOOP
 // ===========================================================================
-void setup() {
-  Serial.begin(115200);
-  delay(300);
-
+void cultivatorSetup() {
   // Set up PWM dimming on both colour channels, then force lights OFF.
   // (Safe default; also matches the "off by default" pulldown resistors.)
-  ledcAttach(RED_LED_PIN,  PWM_FREQ, PWM_RES_BITS);
-  ledcAttach(BLUE_LED_PIN, PWM_FREQ, PWM_RES_BITS);
+  ledcSetup(RED_LED_CHANNEL,  PWM_FREQ, PWM_RES_BITS);
+  ledcAttachPin(RED_LED_PIN,  RED_LED_CHANNEL);
+  ledcSetup(BLUE_LED_CHANNEL, PWM_FREQ, PWM_RES_BITS);
+  ledcAttachPin(BLUE_LED_PIN, BLUE_LED_CHANNEL);
   applyOutputs(0, 0);
 
   // Find the clock. If missing, AUTO holds the lights off and warns.
@@ -254,7 +260,7 @@ void setup() {
   printBanner();
 }
 
-void loop() {
+void cultivatorLoop() {
   handleSerial();
   if (millis() - lastUpdate >= UPDATE_INTERVAL_MS) {
     lastUpdate = millis();
