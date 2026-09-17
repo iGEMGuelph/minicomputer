@@ -195,19 +195,42 @@ so the lights never come on uncontrolled.
 
 ## Section 5 — Uploading the code (short)
 
-Once it's wired, the code goes onto the board from a laptop using the free
-**Arduino IDE**:
+Once it's wired, the code goes onto the board from a laptop using
+**PlatformIO**. (This project used to be an Arduino IDE sketch; it isn't any
+more, and there is no longer a `.ino` file.)
 
-1. Install the **Arduino IDE** (arduino.cc/en/software).
-2. In the IDE, add the **Arduino Nano ESP32** board and the **RTClib** library
-   (both through the IDE's built-in installers — Boards Manager and Library
-   Manager).
-3. Open `firmware/cultivator/cultivator.ino`, plug the board in over USB, pick
-   the board/port, and click **Upload**.
-4. Open the **Serial Monitor** at **115200 baud** and type `help`.
+1. Install PlatformIO:  `pip install platformio`
+2. Set up your WiFi credentials — the build will not succeed without them:
+   ```
+   cd firmware/cultivator/src/sign-on
+   cp secrets.h.example secrets.h
+   ```
+   Then open `secrets.h` and fill in the SSID/password. It's gitignored, so your
+   credentials stay off GitHub.
+3. Tell the board where the dashboard is. In
+   `firmware/cultivator/src/remote/config.h`, set `API_HOST` to the IP address
+   of the computer running the backend (find it with `hostname -I` on
+   Linux/Mac, or `ipconfig` on Windows). Leave it alone if you're only testing
+   over USB.
+4. Plug the board in over USB, then build and upload:
+   ```
+   cd firmware/cultivator
+   pio run --target upload
+   ```
+   The board and the RTClib/ArduinoJson libraries are downloaded automatically
+   the first time; expect the first build to take a few minutes.
+5. Open the serial monitor at **115200 baud** and type `help`:
+   ```
+   pio device monitor
+   ```
 
 **First test — go slow and start dim:** before connecting 12 V, type `off` in
-the Serial Monitor (this holds both colours off). *Then* connect 12 V and test
-`red 10`, then `blue 10` — confirm each colour responds at low brightness before
-turning it up. When you're happy, type `auto` to hand control to the daily
-schedule.
+the serial monitor (this holds every colour off, and takes control away from
+the dashboard so nothing can change brightness behind your back). *Then*
+connect 12 V and test `red 10`, then `blue 10` — confirm each colour responds at
+low brightness before turning it up. When you're happy, type `auto` to hand
+control to the daily schedule, or `remote` to hand it to the dashboard.
+
+> `uvb` and `farred` are accepted as commands too, but the V1.0 board has no
+> driver for those colours — the firmware will tell you they are NOT WIRED
+> rather than pretending to work.

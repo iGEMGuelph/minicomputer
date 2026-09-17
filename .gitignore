@@ -4,11 +4,13 @@ build/
 *.bin
 *.elf
 
-# PlatformIO (if used later)
+# PlatformIO
 .pio/
 
-# eduroam / WiFi credentials — never commit real secrets
-firmware/cultivator/sign-on/secrets.h
+*.log
+
+# WiFi credentials — never commit real secrets
+firmware/cultivator/src/sign-on/secrets.h
 
 # Editors
 .vscode/

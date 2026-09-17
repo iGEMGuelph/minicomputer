@@ -1,15 +1,14 @@
 /* ===========================================================================
    main.cpp  —  combined entry point
    ---------------------------------------------------------------------------
-   Runs both modules side by side on one board:
+   Runs three modules side by side on one board:
      * cultivator  (src/cultivator/) — grow-light schedule/dimming, RTC, Serial menu
-     * sign-on     (src/sign-on/)    — eduroam WPA2-Enterprise connect + auth test
+     * sign-on     (src/sign-on/)    — private WiFi, falling back to eduroam
+     * remote      (src/remote/)     — polls the dashboard for dimmer levels
 
-   Each module keeps its own setup/loop pair (cultivatorSetup/cultivatorLoop,
-   signOnSetup/signOnLoop) instead of the Arduino setup()/loop() — this file is
-   the only place setup()/loop() are defined, and it just calls both in turn.
-   Neither module blocks for long in its loop function, so they share the
-   single-threaded loop() fine.
+   Each module exposes an xxxSetup()/xxxLoop() pair; this is the only place the
+   Arduino setup()/loop() are defined. The lights are configured and forced OFF
+   before anything touches the network.
    =========================================================================== */
 
 #include <Arduino.h>
@@ -20,15 +19,20 @@ void cultivatorLoop();
 void signOnSetup();
 void signOnLoop();
 
+void remoteSetup();
+void remoteLoop();
+
 void setup() {
   Serial.begin(115200);
   delay(300);
 
   cultivatorSetup();
   signOnSetup();
+  remoteSetup();
 }
 
 void loop() {
   cultivatorLoop();
   signOnLoop();
+  remoteLoop();
 }

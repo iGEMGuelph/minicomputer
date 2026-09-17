@@ -1,80 +1,85 @@
 /* ===========================================================================
    Cultivator  —  iGEM Guelph 2026
-   Grow-light controller firmware                                  v0.2.0
+   Grow-light controller firmware                                  v0.3.0
    ---------------------------------------------------------------------------
    Matches the Prototype Schematic V1.0 (updated 2026-07-08):
    Arduino Nano ESP32 + 2 LED drivers (red/blue) + 2 low-side MOSFETs + DS3231 RTC.
 
-   WHAT THIS DOES (exactly the confirmed "Must/Should" hardware stories):
-     * Turns the RED and BLUE LED channels on/off on a daily schedule (RTC).
-     * Dims each colour independently (PWM through the MOSFET gates).
-     * A simple Serial menu (USB) to test and tune it by hand.
+   WHAT THIS DOES:
+     * Dims four colour channels independently (PWM through MOSFET gates).
+       Only red and blue are wired on the V1.0 board; see config.h.
+     * Takes levels from the RTC daily schedule (AUTO), the dashboard over WiFi
+       (REMOTE, see ../remote/), or the Serial menu (MANUAL).
 
-   WHAT THIS DOES NOT DO (on purpose — hardware isn't there / it's future work):
-     * No temperature cutoff  (no temperature sensor exists on this board).
-     * No WiFi / app upload    (software feature for later).
-     * No sensors (pH/CO2/etc).
-     See docs/ROADMAP.md.
+   WHAT THIS DOES NOT DO (hardware isn't there — see docs/ROADMAP.md):
+     * No temperature cutoff, no sensors.
 
    SAFETY NOTES (why this cannot harm the hardware):
      * The LED drivers current-limit each LED to a safe 700 mA no matter what
        the code does, so the LEDs cannot be over-driven from software.
      * The 10k pulldown on each MOSFET gate keeps both lights OFF during
        power-up and while the code is being uploaded.
-     * On boot, the code explicitly sets both lights to OFF before anything else.
+     * On boot, the code explicitly sets every light to OFF before anything else.
 
    BOARD:      Arduino Nano ESP32
-   LIBRARIES:  RTClib by Adafruit  (Arduino IDE -> Library Manager)
+   LIBRARIES:  RTClib by Adafruit, ArduinoJson (see platformio.ini)
    SETTINGS:   edit config.h (pins, brightness, schedule).
    =========================================================================== */
 
 #include <Arduino.h>
 #include "config.h"
+#include "cultivator.h"
 #include "schedule.h"
 #include <Wire.h>
 #include <RTClib.h>
 
 static const int   PWM_MAX  = (1 << PWM_RES_BITS) - 1;   // 8 bits -> 255
-static const char* VERSION  = "0.2.0";
+static const char* VERSION  = "0.3.0";
 
-// This board's installed arduino-esp32 core only has the old channel-based
-// LEDC API (ledcSetup/ledcAttachPin/ledcWrite-by-channel), not the newer
-// pin-based ledcAttach()/ledcWrite(pin, ...). Each colour gets its own channel.
-static const int RED_LED_CHANNEL  = 0;
-static const int BLUE_LED_CHANNEL = 1;
+// File-scope state is static so it cannot collide with the other modules'
+// globals. Channel tables are indexed by the LightChannel enum.
+static const int  CHANNEL_PIN[CH_COUNT]     = {
+  UVB_LED_PIN, RED_LED_PIN, FAR_RED_LED_PIN, BLUE_LED_PIN
+};
+static const int  CHANNEL_DAY_PCT[CH_COUNT] = {
+  UVB_DAY_PCT, RED_DAY_PCT, FAR_RED_DAY_PCT, BLUE_DAY_PCT
+};
+static const char* CHANNEL_NAME[CH_COUNT]   = { "uvb", "red", "far_red", "blue" };
+// Human-friendly labels for the serial menu, same order.
+static const char* CHANNEL_LABEL[CH_COUNT]  = { "UVB", "RED", "FAR RED", "BLUE" };
 
-RTC_DS3231 rtc;
-bool  rtcOk = false;                 // true if the DS3231 clock was found
+// arduino-esp32 2.x LEDC API (channel-based). The LightChannel index doubles as
+// the LEDC channel number.
+static RTC_DS3231 rtc;
+static bool  rtcOk = false;           // true if the DS3231 clock was found
 
-enum Mode { MODE_AUTO, MODE_MANUAL };
-Mode  mode = MODE_AUTO;              // AUTO = follow schedule, MANUAL = hold fixed levels
+static Mode  mode = MODE_AUTO;        // AUTO = follow schedule (power-on default)
 
-int   manualRed  = 0;                // brightness used in MANUAL mode (%)
-int   manualBlue = 0;
+static int   manualLevels[CH_COUNT]  = {0, 0, 0, 0};  // levels used in MANUAL mode
+static int   remoteLevels[CH_COUNT]  = {0, 0, 0, 0};  // levels pushed by the dashboard
+static int   currentLevels[CH_COUNT] = {0, 0, 0, 0};  // levels actually applied
 
-int   schedOnMin  = SCHEDULE_ON_HOUR  * 60;   // schedule as minutes-into-day
-int   schedOffMin = SCHEDULE_OFF_HOUR * 60;
+static int   schedOnMin  = SCHEDULE_ON_HOUR  * 60;   // schedule as minutes-into-day
+static int   schedOffMin = SCHEDULE_OFF_HOUR * 60;
 
-int   currentRed  = 0;               // brightness currently applied
-int   currentBlue = 0;
-
-bool  warnedNoRtc = false;
-unsigned long lastUpdate = 0;
+static bool  warnedNoRtc = false;
+static unsigned long lastUpdate = 0;
 
 // ===========================================================================
 // LIGHT OUTPUT  —  set each colour's brightness (0-100%) via PWM duty cycle
 // ===========================================================================
-void applyOutputs(int redPct, int bluePct) {
-  redPct  = constrain(redPct,  0, 100);
-  bluePct = constrain(bluePct, 0, 100);
-  ledcWrite(RED_LED_CHANNEL,  map(redPct,  0, 100, 0, PWM_MAX));
-  ledcWrite(BLUE_LED_CHANNEL, map(bluePct, 0, 100, 0, PWM_MAX));
-  currentRed  = redPct;
-  currentBlue = bluePct;
+static void applyOutputs(const int levels[CH_COUNT]) {
+  for (int ch = 0; ch < CH_COUNT; ch++) {
+    int pct = constrain(levels[ch], 0, 100);
+    if (CHANNEL_PIN[ch] != NOT_WIRED) {
+      ledcWrite(ch, map(pct, 0, 100, 0, PWM_MAX));
+    }
+    currentLevels[ch] = pct;
+  }
 }
 
 // Current time as minutes-since-midnight (0..1439) from the RTC.
-int nowMinutes() {
+static int nowMinutes() {
   DateTime n = rtc.now();
   return n.hour() * 60 + n.minute();
 }
@@ -82,9 +87,13 @@ int nowMinutes() {
 // ===========================================================================
 // MAIN UPDATE  —  decide what the lights should be doing and apply it
 // ===========================================================================
-void update() {
+static void update() {
   if (mode == MODE_MANUAL) {
-    applyOutputs(manualRed, manualBlue);
+    applyOutputs(manualLevels);
+    return;
+  }
+  if (mode == MODE_REMOTE) {
+    applyOutputs(remoteLevels);
     return;
   }
   // AUTO: follow the daily schedule. Requires the RTC to know the time.
@@ -94,17 +103,68 @@ void update() {
       Serial.println(F("Lights held OFF. Wire the RTC, or use manual commands (e.g. 'red 10')."));
       warnedNoRtc = true;
     }
-    applyOutputs(0, 0);
+    int off[CH_COUNT] = {0, 0, 0, 0};
+    applyOutputs(off);
     return;
   }
   bool day = isDaytimeMinutes(nowMinutes(), schedOnMin, schedOffMin);
-  applyOutputs(day ? RED_DAY_PCT : 0, day ? BLUE_DAY_PCT : 0);
+  int wanted[CH_COUNT];
+  for (int ch = 0; ch < CH_COUNT; ch++) wanted[ch] = day ? CHANNEL_DAY_PCT[ch] : 0;
+  applyOutputs(wanted);
+}
+
+// ===========================================================================
+// PUBLIC INTERFACE  (declared in cultivator.h)
+// ===========================================================================
+const char* channelName(int channel) {
+  if (channel < 0 || channel >= CH_COUNT) return "?";
+  return CHANNEL_NAME[channel];
+}
+
+bool channelIsWired(int channel) {
+  if (channel < 0 || channel >= CH_COUNT) return false;
+  return CHANNEL_PIN[channel] != NOT_WIRED;
+}
+
+int channelLevel(int channel) {
+  if (channel < 0 || channel >= CH_COUNT) return 0;
+  return currentLevels[channel];
+}
+
+Mode currentMode() { return mode; }
+
+bool rtcPresent() { return rtcOk; }
+
+const char* modeName(Mode m) {
+  switch (m) {
+    case MODE_AUTO:   return "auto";
+    case MODE_MANUAL: return "manual";
+    case MODE_REMOTE: return "remote";
+  }
+  return "?";
+}
+
+void setMode(Mode m) {
+  if (m == MODE_AUTO) warnedNoRtc = false;
+  if (m == MODE_MANUAL) {
+    // Hold whatever is lit right now, not a stale manual set.
+    for (int ch = 0; ch < CH_COUNT; ch++) manualLevels[ch] = currentLevels[ch];
+  }
+  mode = m;
+  update();
+}
+
+void setAllLevels(const int levels[CH_COUNT]) {
+  for (int ch = 0; ch < CH_COUNT; ch++) {
+    remoteLevels[ch] = constrain(levels[ch], 0, 100);
+  }
+  if (mode == MODE_REMOTE) update();
 }
 
 // ===========================================================================
 // SERIAL COMMAND INTERFACE
 // ===========================================================================
-void printBanner() {
+static void printBanner() {
   Serial.println();
   Serial.println(F("========================================"));
   Serial.print  (F("  Cultivator grow-light controller v")); Serial.println(VERSION);
@@ -116,24 +176,27 @@ void printBanner() {
   Serial.println();
 }
 
-void printHelp() {
+static void printHelp() {
   Serial.println(F("Commands (type one, then Enter):"));
   Serial.println(F("  help                 show this list"));
   Serial.println(F("  status               show current state"));
-  Serial.println(F("  red <0-100>          set RED brightness  (switches to manual)"));
-  Serial.println(F("  blue <0-100>         set BLUE brightness (switches to manual)"));
-  Serial.println(F("  both <0-100>         set both colours"));
-  Serial.println(F("  off                  both colours off (manual)"));
+  Serial.println(F("  uvb <0-100>          set UVB brightness     (switches to manual)"));
+  Serial.println(F("  red <0-100>          set RED brightness     (switches to manual)"));
+  Serial.println(F("  farred <0-100>       set FAR RED brightness (switches to manual)"));
+  Serial.println(F("  blue <0-100>         set BLUE brightness    (switches to manual)"));
+  Serial.println(F("  all <0-100>          set every colour"));
+  Serial.println(F("  off                  all colours off (manual)"));
   Serial.println(F("  auto                 resume the daily schedule"));
   Serial.println(F("  manual               hold current brightness, ignore schedule"));
+  Serial.println(F("  remote               follow the dashboard over WiFi"));
   Serial.println(F("  schedule <on> <off>  set ON and OFF hours, 0-23"));
   Serial.println(F("  settime Y M D h m s  set the clock, e.g. settime 2026 7 9 14 30 0"));
   Serial.println(F("  gettime              show the clock time"));
 }
 
-void printStatus() {
+static void printStatus() {
   Serial.println(F("---- STATUS ----"));
-  Serial.print(F("  mode      : ")); Serial.println(mode == MODE_AUTO ? F("AUTO (schedule)") : F("MANUAL"));
+  Serial.print(F("  mode      : ")); Serial.println(modeName(mode));
   Serial.print(F("  schedule  : ON ")); Serial.print(schedOnMin / 60);
   Serial.print(F(":00  OFF ")); Serial.print(schedOffMin / 60); Serial.println(F(":00"));
   if (rtcOk) {
@@ -144,13 +207,19 @@ void printStatus() {
   } else {
     Serial.println(F("  time (RTC): clock NOT found"));
   }
-  Serial.print(F("  red       : ")); Serial.print(currentRed);  Serial.println('%');
-  Serial.print(F("  blue      : ")); Serial.print(currentBlue); Serial.println('%');
+  for (int ch = 0; ch < CH_COUNT; ch++) {
+    Serial.print(F("  "));
+    Serial.print(CHANNEL_LABEL[ch]);
+    for (int pad = strlen(CHANNEL_LABEL[ch]); pad < 10; pad++) Serial.print(' ');
+    Serial.print(F(": ")); Serial.print(currentLevels[ch]); Serial.print('%');
+    if (!channelIsWired(ch)) Serial.print(F("   (NOT WIRED — no driver on this board)"));
+    Serial.println();
+  }
   Serial.println(F("----------------"));
 }
 
 // Split a line into space-separated tokens.
-int tokenize(String line, String out[], int maxTokens) {
+static int tokenize(String line, String out[], int maxTokens) {
   int n = 0, start = 0;
   line.trim();
   while (n < maxTokens && start < (int)line.length()) {
@@ -163,35 +232,60 @@ int tokenize(String line, String out[], int maxTokens) {
   return n;
 }
 
-void processCommand(String line) {
+// Map a typed command word to a channel, or -1 if it is not a colour command.
+static int channelForCommand(const String& cmd) {
+  if (cmd == "uvb")    return CH_UVB;
+  if (cmd == "red")    return CH_RED;
+  if (cmd == "farred") return CH_FAR_RED;
+  if (cmd == "blue")   return CH_BLUE;
+  return -1;
+}
+
+static void processCommand(String line) {
   String tok[8];
   int n = tokenize(line, tok, 8);
   if (n == 0) return;
   String cmd = tok[0];
   cmd.toLowerCase();
 
+  int ch = channelForCommand(cmd);
+  if (ch >= 0 && n >= 2) {
+    // A colour command takes local control; the person at the console wins.
+    if (mode != MODE_MANUAL) setMode(MODE_MANUAL);
+    manualLevels[ch] = constrain(tok[1].toInt(), 0, 100);
+    update();
+    Serial.print(CHANNEL_LABEL[ch]);
+    Serial.print(F(" set to ")); Serial.print(currentLevels[ch]);
+    Serial.print(F("% (manual)"));
+    if (!channelIsWired(ch)) Serial.print(F("  — NOTE: this channel is NOT WIRED"));
+    Serial.println();
+    return;
+  }
+
   if (cmd == "help") {
     printHelp();
   } else if (cmd == "status") {
     printStatus();
-  } else if (cmd == "red" && n >= 2) {
-    mode = MODE_MANUAL; manualRed = tok[1].toInt(); update();
-    Serial.print(F("RED set to ")); Serial.print(currentRed); Serial.println(F("% (manual)"));
-  } else if (cmd == "blue" && n >= 2) {
-    mode = MODE_MANUAL; manualBlue = tok[1].toInt(); update();
-    Serial.print(F("BLUE set to ")); Serial.print(currentBlue); Serial.println(F("% (manual)"));
-  } else if (cmd == "both" && n >= 2) {
-    mode = MODE_MANUAL; manualRed = manualBlue = tok[1].toInt(); update();
-    Serial.print(F("BOTH set to ")); Serial.print(currentRed); Serial.println(F("% (manual)"));
+  } else if (cmd == "all" && n >= 2) {
+    if (mode != MODE_MANUAL) setMode(MODE_MANUAL);
+    int v = constrain(tok[1].toInt(), 0, 100);
+    for (int i = 0; i < CH_COUNT; i++) manualLevels[i] = v;
+    update();
+    Serial.print(F("ALL set to ")); Serial.print(v); Serial.println(F("% (manual)"));
   } else if (cmd == "off") {
-    mode = MODE_MANUAL; manualRed = manualBlue = 0; update();
-    Serial.println(F("Both colours OFF (manual)"));
+    if (mode != MODE_MANUAL) setMode(MODE_MANUAL);
+    for (int i = 0; i < CH_COUNT; i++) manualLevels[i] = 0;
+    update();
+    Serial.println(F("All colours OFF (manual)"));
   } else if (cmd == "auto") {
-    mode = MODE_AUTO; warnedNoRtc = false; update();
+    setMode(MODE_AUTO);
     Serial.println(F("AUTO mode - following the daily schedule"));
   } else if (cmd == "manual") {
-    mode = MODE_MANUAL; manualRed = currentRed; manualBlue = currentBlue;
+    setMode(MODE_MANUAL);
     Serial.println(F("MANUAL mode - holding current brightness"));
+  } else if (cmd == "remote") {
+    setMode(MODE_REMOTE);
+    Serial.println(F("REMOTE mode - following the dashboard"));
   } else if (cmd == "schedule" && n >= 3) {
     int on  = constrain(tok[1].toInt(), 0, 23);
     int off = constrain(tok[2].toInt(), 0, 23);
@@ -223,7 +317,7 @@ void processCommand(String line) {
 }
 
 // Read typed input one line at a time (non-blocking).
-void handleSerial() {
+static void handleSerial() {
   static String buf;
   while (Serial.available()) {
     char c = Serial.read();
@@ -240,13 +334,14 @@ void handleSerial() {
 // SETUP  &  LOOP
 // ===========================================================================
 void cultivatorSetup() {
-  // Set up PWM dimming on both colour channels, then force lights OFF.
-  // (Safe default; also matches the "off by default" pulldown resistors.)
-  ledcSetup(RED_LED_CHANNEL,  PWM_FREQ, PWM_RES_BITS);
-  ledcAttachPin(RED_LED_PIN,  RED_LED_CHANNEL);
-  ledcSetup(BLUE_LED_CHANNEL, PWM_FREQ, PWM_RES_BITS);
-  ledcAttachPin(BLUE_LED_PIN, BLUE_LED_CHANNEL);
-  applyOutputs(0, 0);
+  // PWM on every wired channel, then force the lights OFF (safe default).
+  for (int ch = 0; ch < CH_COUNT; ch++) {
+    if (CHANNEL_PIN[ch] == NOT_WIRED) continue;
+    ledcSetup(ch, PWM_FREQ, PWM_RES_BITS);
+    ledcAttachPin(CHANNEL_PIN[ch], ch);
+  }
+  int off[CH_COUNT] = {0, 0, 0, 0};
+  applyOutputs(off);
 
   // Find the clock. If missing, AUTO holds the lights off and warns.
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
