@@ -8,7 +8,7 @@ build/
 .pio/
 
 # eduroam / WiFi credentials — never commit real secrets
-firmware/cultivator/sign-on/secrets.h
+firmware/cultivator/src/sign-on/secrets.h
 
 # Editors
 .vscode/

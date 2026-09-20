@@ -39,8 +39,7 @@ minicomputer/
 │       ├── schedule.h           the daily on/off time logic (kept separate, plain C++)
 │       └── src/
 │           └── api/
-│               ├── api.cpp      READ_ONLY flag + web server (GET /api/status)
-│               └── read_only.h  shares the READ_ONLY flag with other modules
+│               └── api.cpp      READ_ONLY flag + web server (GET /api/status)
 ├── docs/
 │   ├── BUILD_GUIDE.md           step-by-step wiring guide (plain, beginner-friendly)
 │   ├── ROADMAP.md               what comes next (temp sensor, WiFi, app)
@@ -79,11 +78,10 @@ mode.
 - **What read-only means:** the dashboard can still show what the cultivator
   reports, but must not send it changes. Nothing on the board enforces the flag
   yet; it is only reported.
-- **Changing it:** only on the device. In the Serial Monitor type `readonly on`,
-  `readonly off`, or just `readonly` to show it. It cannot be changed over the
-  network.
-- **It is not saved:** `READ_ONLY` resets to `false` (`READ_ONLY_DEFAULT` in
-  `api.cpp`) whenever the board restarts or loses power.
+- **Changing it:** set `#define READ_ONLY_MODE true` (or `false`) in `secrets.h`
+  and re-flash. It is fixed at build time, so it survives restarts and cannot be
+  changed at runtime or over the network. If `secrets.h` doesn't define it, the
+  build stops with an error.
 - **Finding the address:** once WiFi connects, the Serial Monitor prints
   `API listening: http://<ip>/api/status`. Set that address as `MINICOMPUTER_URL`
   in the dashboard repo's `backend/config.py`.

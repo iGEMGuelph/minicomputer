@@ -33,7 +33,6 @@
 #include "schedule.h"
 #include <Wire.h>
 #include <RTClib.h>
-#include "../api/read_only.h"   // READ_ONLY flag, defined in api.cpp
 
 static const int   PWM_MAX  = (1 << PWM_RES_BITS) - 1;   // 8 bits -> 255
 static const char* VERSION  = "0.2.0";
@@ -130,7 +129,6 @@ void printHelp() {
   Serial.println(F("  schedule <on> <off>  set ON and OFF hours, 0-23"));
   Serial.println(F("  settime Y M D h m s  set the clock, e.g. settime 2026 7 9 14 30 0"));
   Serial.println(F("  gettime              show the clock time"));
-  Serial.println(F("  readonly [on|off]    show or set read-only mode"));
 }
 
 void printStatus() {
@@ -148,8 +146,6 @@ void printStatus() {
   }
   Serial.print(F("  red       : ")); Serial.print(currentRed);  Serial.println('%');
   Serial.print(F("  blue      : ")); Serial.print(currentBlue); Serial.println('%');
-  // Same flag the dashboard reads from GET /api/status.
-  Serial.print(F("  read-only : ")); Serial.println(READ_ONLY ? F("ON") : F("OFF"));
   Serial.println(F("----------------"));
 }
 
@@ -220,17 +216,6 @@ void processCommand(String line) {
     } else {
       Serial.println(F("No RTC found."));
     }
-  } else if (cmd == "readonly") {
-    // The only way to change READ_ONLY: on the device via USB Serial, never over the network.
-    if (n >= 2) {                        // "readonly on" / "readonly off"
-      String arg = tok[1];
-      arg.toLowerCase();                 // accept ON / On / on
-      if (arg == "on")       READ_ONLY = true;
-      else if (arg == "off") READ_ONLY = false;
-      else { Serial.println(F("Usage: readonly [on|off]")); return; }   // bad word: change nothing
-    }
-    // Always print the state: the board has no screen, so this confirms the change.
-    Serial.print(F("Read-only mode: ")); Serial.println(READ_ONLY ? F("ON") : F("OFF"));
   } else {
     Serial.print(F("Unknown command: ")); Serial.println(line);
     Serial.println(F("Type 'help' for the list."));
