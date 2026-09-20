@@ -36,7 +36,10 @@ minicomputer/
 │   └── cultivator/
 │       ├── cultivator.ino       the program that runs on the board
 │       ├── config.h             ALL user-editable settings (pins, brightness, schedule)
-│       └── schedule.h           the daily on/off time logic (kept separate, plain C++)
+│       ├── schedule.h           the daily on/off time logic (kept separate, plain C++)
+│       └── src/
+│           └── api/
+│               └── api.cpp      READ_ONLY flag + web server (GET /api/status)
 ├── docs/
 │   ├── BUILD_GUIDE.md           step-by-step wiring guide (plain, beginner-friendly)
 │   ├── ROADMAP.md               what comes next (temp sensor, WiFi, app)
@@ -61,6 +64,28 @@ wires connect to. You should not need to touch anything else for normal use.
 | DS3231 RTC | Battery-backed clock for the daily schedule |
 
 Full details and wiring: [`docs/BUILD_GUIDE.md`](docs/BUILD_GUIDE.md).
+
+## API (for the dashboard)
+
+Once the board is on WiFi it runs a small web server (port 80). The dashboard's
+backend calls it to check whether the cultivator is online and in **read-only**
+mode.
+
+| Endpoint | Method | Handler | Reply | Notes |
+|----------|--------|---------|-------|-------|
+| `/api/status` | `GET` | `src/api/api.cpp` `handleStatus()` | `{"device":"cultivator","readOnly":false}` | `readOnly` is the current `READ_ONLY` flag. Any other path or method returns 404. |
+
+- **What read-only means:** the dashboard can still show what the cultivator
+  reports, but must not send it changes. Nothing on the board enforces the flag
+  yet; it is only reported.
+- **Changing it:** set `#define READ_ONLY_MODE true` (or `false`) in `secrets.h`
+  and re-flash. It is fixed at build time, so it survives restarts and cannot be
+  changed at runtime or over the network. If `secrets.h` doesn't define it, the
+  build stops with an error.
+- **Finding the address:** once WiFi connects, the Serial Monitor prints
+  `API listening: http://<ip>/api/status`. Set that address as `MINICOMPUTER_URL`
+  in the dashboard repo's `backend/config.py`.
+- **Status:** compiles, but not yet run on a real board.
 
 ## Status
 
