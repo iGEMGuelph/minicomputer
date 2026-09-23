@@ -2,7 +2,7 @@
   config.h  —  THE ONE FILE YOU EDIT TO CHANGE SETTINGS
 
   Edit a number after a "#define", save, then re-upload to the board.
-  You should NOT need to edit cultivator.ino for normal use.
+  (Network settings for the dashboard live separately, in ../remote/config.h.)
 */
 
 #ifndef CONFIG_H
@@ -11,33 +11,36 @@
 // ===========================================================================
 // 1) WIRING  —  which Arduino pin connects to what
 // ===========================================================================
-// IMPORTANT: wire the hardware to THESE pins. They are the pins the code uses.
-// (The draft schematic's exact pin routing is hard to read, so the code is the
-//  single source of truth. If the team wires to different pins, just change the
-//  numbers here to match — nothing else needs to change.)
+// Use the pin LABELS printed on the Arduino Nano ESP32 board. The code is the
+// single source of truth for pins; if the team wires differently, change the
+// numbers here and nothing else.
 //
-// Use the pin LABELS printed on the Arduino Nano ESP32 board.
+// NOT_WIRED marks a colour with no LED driver on the board yet. It still accepts
+// and reports a brightness (so the dashboard stays honest) but drives nothing.
+// To add a colour later: fit the driver + MOSFET, then put its pin here.
 
-#define BLUE_LED_PIN   D2      // -> BLUE MOSFET gate (through its 220 ohm resistor)
-#define RED_LED_PIN    D3      // -> RED  MOSFET gate (through its 220 ohm resistor)
+#define NOT_WIRED      -1
+
+#define UVB_LED_PIN     NOT_WIRED  // not on the V1.0 board
+#define RED_LED_PIN     D3         // -> RED  MOSFET gate (through its 220 ohm resistor)
+#define FAR_RED_LED_PIN NOT_WIRED  // not on the V1.0 board
+#define BLUE_LED_PIN    D2         // -> BLUE MOSFET gate (through its 220 ohm resistor)
+
 #define I2C_SDA_PIN    A4      // -> RTC clock  SDA
 #define I2C_SCL_PIN    A5      // -> RTC clock  SCL
 // RTC also needs: VCC -> 3V3,  GND -> GND (common ground).
 
 // ===========================================================================
-// 2) DAYTIME BRIGHTNESS  —  brightness used automatically during the ON window
+// 2) DAYTIME BRIGHTNESS  —  used in AUTO mode during the ON window (0-100)
 // ===========================================================================
-// 0 = off, 100 = full.
-
-#define RED_DAY_PCT     80     // red brightness during the day (%)
-#define BLUE_DAY_PCT    60     // blue brightness during the day (%)
+#define UVB_DAY_PCT      0
+#define RED_DAY_PCT     80
+#define FAR_RED_DAY_PCT  0
+#define BLUE_DAY_PCT    60
 
 // ===========================================================================
-// 3) DAILY SCHEDULE  —  24-hour clock
+// 3) DAILY SCHEDULE  —  24-hour clock. Wrapping past midnight is allowed.
 // ===========================================================================
-// Example: ON at 06:00, OFF at 22:00 (16 h on / 8 h off).
-// Wrapping past midnight is allowed, e.g. ON 20, OFF 6.
-
 #define SCHEDULE_ON_HOUR    6      // hour lights turn ON   (0-23)
 #define SCHEDULE_OFF_HOUR   22     // hour lights turn OFF  (0-23)
 
