@@ -8,8 +8,11 @@ fertilizer). This repository holds the code that runs on the device's
 microcontroller.
 
 > **What the code does today:** controls a two-colour (red + blue) LED grow
-> light — sets each colour's brightness and runs them on a daily on/off
-> schedule using a real-time clock. That's the current hardware. The larger
+> light (brightness + a daily on/off schedule from a real-time clock), connects
+> to WiFi, and every 10 s sends a reading (time + pH / biomass / air & water
+> temperature) to the dashboard backend. The sensors don't exist yet, so those
+> values are sent as `null` until hardware adds them. See
+> [`docs/TELEMETRY.md`](docs/TELEMETRY.md). The larger
 > product vision (sensors, app, dashboard) is tracked in
 > [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
@@ -23,31 +26,45 @@ assumed.
 
 In short:
 1. Wire the hardware (Section 3 of the build guide).
-2. Install the Arduino IDE + RTClib library (Section 5).
-3. Open `firmware/cultivator/cultivator.ino` and upload it (Section 5).
+2. Install PlatformIO and fill in the WiFi login + backend address (Section 5).
+3. `cd firmware/cultivator && pio run -t upload`
 4. Open the Serial Monitor at 115200 and type `help`.
 
 ## Repository layout
 
 ```
 minicomputer/
-├── README.md                    <- you are here
-├── firmware/
-│   └── cultivator/
-│       ├── cultivator.ino       the program that runs on the board
-│       ├── config.h             ALL user-editable settings (pins, brightness, schedule)
-│       └── schedule.h           the daily on/off time logic (kept separate, plain C++)
+├── README.md                      <- you are here
+├── firmware/cultivator/           PlatformIO project (the code on the board)
+│   ├── platformio.ini             build settings; `pio run`, `pio test -e native`
+│   ├── src/
+│   │   ├── main.cpp               setup()/loop(): runs the three modules below
+│   │   ├── cultivator/            grow lights + RTC + serial menu
+│   │   │   ├── config.h           pins, brightness, schedule
+│   │   │   └── schedule.h         on/off time logic
+│   │   ├── sign-on/               WiFi (private network, eduroam fallback)
+│   │   │   ├── config.h
+│   │   │   └── secrets.example.h  copy to secrets.h, add your WiFi login
+│   │   └── telemetry/             reading every 10 s -> backend
+│   │       ├── config.h           backend URL, interval, JSON keys
+│   │       ├── sensors.cpp        plug real sensors in here
+│   │       └── reading.h          reading -> JSON (unit-tested)
+│   └── test/                      laptop unit tests
+├── tools/mock_backend.py          fake backend for testing uploads
 ├── docs/
-│   ├── BUILD_GUIDE.md           step-by-step wiring guide (plain, beginner-friendly)
-│   ├── ROADMAP.md               what comes next (temp sensor, WiFi, app)
-│   └── reference/               source materials (schematic, user stories)
+│   ├── BUILD_GUIDE.md             wiring + uploading, beginner-friendly
+│   ├── TELEMETRY.md               data upload: JSON contract, settings, testing
+│   ├── ROADMAP.md                 what's done, what's next
+│   └── reference/                 schematic, user stories
 └── .gitignore
 ```
 
-## The one file you'll actually edit
+## The files you'll actually edit
 
-`firmware/cultivator/config.h` — brightness, schedule, and which pins the
-wires connect to. You should not need to touch anything else for normal use.
+- `src/cultivator/config.h`: brightness, schedule, pins
+- `src/telemetry/config.h`: backend address, upload interval
+- `src/sign-on/secrets.h` (you create it): WiFi login
+- `src/telemetry/sensors.cpp`: when a real sensor is added
 
 ## Hardware summary
 
@@ -64,11 +81,10 @@ Full details and wiring: [`docs/BUILD_GUIDE.md`](docs/BUILD_GUIDE.md).
 
 ## Status
 
-`v0.2.0` — grow-light firmware, ready for first hardware bring-up (not yet
-tested on real hardware). Red/blue independent dimming, RTC daily schedule, and
-a serial menu for hand testing. Scope is deliberately limited to what the V1.0
-board actually has — see [`docs/ROADMAP.md`](docs/ROADMAP.md) for what's next
-(temperature cutoff needs a real sensor first, then WiFi/app).
+`v0.3.0`: grow lights + WiFi + telemetry upload. It compiles, and the
+JSON is unit-tested, but it has **not yet been tested on real hardware**. The
+backend's `/api/logReading` route and the sensors are the next pieces to
+connect. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## License
 
