@@ -10,6 +10,24 @@ exists and what's next, so future team members know where to pick up.
 - [x] **Daily light schedule** (RTC clock), including windows that cross midnight
 - [x] **Serial command interface** for live testing/tuning
 
+## Done — v0.3.0 (telemetry pipeline)
+- [x] **WiFi sign-on** (private network, eduroam fallback). See `src/sign-on/`
+- [x] **Reading upload every 10 s**: RTC time + pH / biomass / air temp /
+      water temp as JSON to the backend, non-blocking, buffered through WiFi
+      dropouts. See [TELEMETRY.md](TELEMETRY.md)
+- [x] Laptop unit tests (`pio test -e native`) and a mock backend
+      (`tools/mock_backend.py`)
+
+## Handoff — ready to connect
+- [ ] **Backend:** add `POST /api/logReading` matching the contract in
+      [TELEMETRY.md](TELEMETRY.md), then set `BACKEND_URL` in
+      `src/telemetry/config.h`
+- [ ] **Hardware:** each sensor below slots into one function in
+      `src/telemetry/sensors.cpp`. Until then it's sent as `null`
+- [ ] **Timezone:** agree with the backend on how `Time` is read (local time
+      today; see `TIME_UTC_OFFSET`)
+- [ ] First end-to-end test on real hardware (not done yet)
+
 ## Next up (small additions to the current board)
 - [ ] **Over-temperature cutoff** — a "Must" user story, but it needs a real
       temperature sensor added to the board first (the V1.0 schematic shows the
@@ -29,8 +47,8 @@ exists and what's next, so future team members know where to pick up.
 ## Bigger (needs new hardware not yet on the board)
 - [ ] **Sensors** — water temperature, pH, CO₂, light, duckweed biomass,
       aeration/turbidity. None are wired yet; each needs its own sensor part.
-- [ ] **WiFi + data upload** — the Arduino Nano ESP32 has WiFi built in. Send
-      readings to a database/dashboard (the PDF's "API calls" idea).
+- [x] ~~**WiFi + data upload**~~: done in v0.3.0 (sensor values are `null`
+      until the sensors exist).
 - [ ] **App / dashboard** — templated crop profiles, alerts, historical
       metrics, saved/favourited settings. This is a separate software project.
 

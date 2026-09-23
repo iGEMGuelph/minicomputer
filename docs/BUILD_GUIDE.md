@@ -195,16 +195,23 @@ so the lights never come on uncontrolled.
 
 ## Section 5 — Uploading the code (short)
 
-Once it's wired, the code goes onto the board from a laptop using the free
-**Arduino IDE**:
+Once it's wired, the code goes onto the board from a laptop using
+**PlatformIO** (free; the project is set up for it in `firmware/cultivator/`):
 
-1. Install the **Arduino IDE** (arduino.cc/en/software).
-2. In the IDE, add the **Arduino Nano ESP32** board and the **RTClib** library
-   (both through the IDE's built-in installers — Boards Manager and Library
-   Manager).
-3. Open `firmware/cultivator/cultivator.ino`, plug the board in over USB, pick
-   the board/port, and click **Upload**.
-4. Open the **Serial Monitor** at **115200 baud** and type `help`.
+1. Install **VS Code** plus the **PlatformIO IDE** extension, or just the
+   command-line tool (`brew install platformio` on Mac, `pip install platformio`
+   elsewhere). Needed libraries (RTClib, etc.) are downloaded automatically.
+2. **WiFi login:** copy `src/sign-on/secrets.example.h` to
+   `src/sign-on/secrets.h` and fill in the WiFi name/password. (`secrets.h` is
+   never committed.)
+3. **Backend address:** in `src/telemetry/config.h`, set `BACKEND_URL` to the
+   IP of the computer running the backend. See [TELEMETRY.md](TELEMETRY.md).
+   Skip this if you're only testing the lights.
+4. Plug the board in over USB and upload. In VS Code, click the PlatformIO
+   **→ Upload** button. From a terminal:
+   `cd firmware/cultivator && pio run -t upload`
+5. Open the **Serial Monitor** at **115200 baud** (`pio device monitor`) and
+   type `help`.
 
 **First test — go slow and start dim:** before connecting 12 V, type `off` in
 the Serial Monitor (this holds both colours off). *Then* connect 12 V and test

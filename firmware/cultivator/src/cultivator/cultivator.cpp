@@ -1,6 +1,6 @@
 /* ===========================================================================
    Cultivator  —  iGEM Guelph 2026
-   Grow-light controller firmware                                  v0.2.0
+   Grow-light controller firmware                                  v0.3.0
    ---------------------------------------------------------------------------
    Matches the Prototype Schematic V1.0 (updated 2026-07-08):
    Arduino Nano ESP32 + 2 LED drivers (red/blue) + 2 low-side MOSFETs + DS3231 RTC.
@@ -12,7 +12,8 @@
 
    WHAT THIS DOES NOT DO (on purpose — hardware isn't there / it's future work):
      * No temperature cutoff  (no temperature sensor exists on this board).
-     * No WiFi / app upload    (software feature for later).
+     * WiFi + data upload live in their own modules (src/sign-on/,
+       src/telemetry/); this file only shares the RTC and serial menu.
      * No sensors (pH/CO2/etc).
      See docs/ROADMAP.md.
 
@@ -35,7 +36,7 @@
 #include <RTClib.h>
 
 static const int   PWM_MAX  = (1 << PWM_RES_BITS) - 1;   // 8 bits -> 255
-static const char* VERSION  = "0.2.0";
+static const char* VERSION  = "0.3.0";
 
 // This board's installed arduino-esp32 core only has the old channel-based
 // LEDC API (ledcSetup/ledcAttachPin/ledcWrite-by-channel), not the newer
@@ -60,6 +61,17 @@ int   currentBlue = 0;
 
 bool  warnedNoRtc = false;
 unsigned long lastUpdate = 0;
+
+// Telemetry module hooks (src/telemetry/telemetry.cpp).
+void telemetryPrintHelp();
+bool telemetryHandleCommand(const String& cmd, String tok[], int n);
+
+// Current RTC time for other modules (telemetry). False if no RTC.
+bool cultivatorNow(DateTime& out) {
+  if (!rtcOk) return false;
+  out = rtc.now();
+  return true;
+}
 
 // ===========================================================================
 // LIGHT OUTPUT  —  set each colour's brightness (0-100%) via PWM duty cycle
@@ -129,6 +141,7 @@ void printHelp() {
   Serial.println(F("  schedule <on> <off>  set ON and OFF hours, 0-23"));
   Serial.println(F("  settime Y M D h m s  set the clock, e.g. settime 2026 7 9 14 30 0"));
   Serial.println(F("  gettime              show the clock time"));
+  telemetryPrintHelp();
 }
 
 void printStatus() {
@@ -216,6 +229,8 @@ void processCommand(String line) {
     } else {
       Serial.println(F("No RTC found."));
     }
+  } else if (telemetryHandleCommand(cmd, tok, n)) {
+    // handled by the telemetry module
   } else {
     Serial.print(F("Unknown command: ")); Serial.println(line);
     Serial.println(F("Type 'help' for the list."));
