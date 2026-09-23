@@ -14,31 +14,39 @@ NetworkMode currentNetwork = NET_PRIVATE;
 unsigned long connectStartedAt = 0;
 unsigned long lastStatusPrint  = 0;
 
+void printAuthResult(bool authenticated);   // defined below, used by startConnect's eduroam stub
+
 // ===========================================================================
 // Kick off a connection attempt on the given network.
 //   NET_PRIVATE -> plain WPA2-PSK  (NOAH_IDENTITY / NOAH_PASSWORD)
 //   NET_EDUROAM -> WPA2-Enterprise (PEAP, EAP_IDENTITY / EAP_USERNAME / EAP_PASSWORD)
+//
+// NOTE: eduroam is currently a stub on this board. The Arduino GIGA R1 WiFi's
+// library ships a WiFi.beginEnterprise(), but Arduino's own core maintainers
+// document it as incomplete for real two-phase WPA2-Enterprise networks like
+// eduroam (unlike the ESP32 core this firmware previously targeted, which had
+// full esp_wpa2.h PEAP support). Rather than attempt a connection that's known
+// not to work, we keep the NET_PRIVATE -> NET_EDUROAM fallback shape intact
+// (for when GIGA/mbed enterprise support matures) but fail eduroam immediately.
 // ===========================================================================
 void startConnect(NetworkMode mode) {
   currentNetwork = mode;
 
-  WiFi.disconnect(true, true);   // clear any stored/prior WiFi state
-  WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);          // enterprise auth is flaky with modem sleep on
+  WiFi.disconnect();   // clear any prior WiFi state
 
   if (mode == NET_PRIVATE) {
     Serial.println(F("Starting private WiFi sign-on..."));
     Serial.print  (F("  SSID: ")); Serial.println(NOAH_IDENTITY);
     WiFi.begin(NOAH_IDENTITY, NOAH_PASSWORD);
+    connectStartedAt = millis();
+    linkState = LINK_CONNECTING;
   } else {
-    Serial.println(F("Starting eduroam sign-on..."));
-    Serial.print  (F("  identity: ")); Serial.println(EAP_IDENTITY);
-    Serial.print  (F("  username: ")); Serial.println(EAP_USERNAME);
-    WiFi.begin(EDUROAM_SSID, WPA2_AUTH_PEAP, EAP_IDENTITY, EAP_USERNAME, EAP_PASSWORD);
+    Serial.println(F("Skipping eduroam: WPA2-Enterprise is not reliably"));
+    Serial.println(F("supported by the GIGA R1's WiFi library (stub only)."));
+    connectStartedAt = millis();
+    linkState = LINK_AUTH_FAILED;
+    printAuthResult(false);
   }
-
-  connectStartedAt = millis();
-  linkState = LINK_CONNECTING;
 }
 
 // ===========================================================================

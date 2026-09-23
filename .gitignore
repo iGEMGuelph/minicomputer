@@ -6,6 +6,7 @@ build/
 
 # PlatformIO (if used later)
 .pio/
+*.log
 
 # eduroam / WiFi credentials — never commit real secrets
 firmware/cultivator/src/sign-on/secrets.h

@@ -56,7 +56,7 @@ wires connect to. You should not need to touch anything else for normal use.
 
 | Part | Role |
 |------|------|
-| Arduino Nano ESP32 | The microcontroller ("brain") that runs the code |
+| Arduino GIGA R1 WiFi | The microcontroller ("brain") that runs the code |
 | 12 V DC supply | Power for the LEDs |
 | Red + Blue LED drivers (700 mA) | Feed each LED a safe, steady current |
 | Red (660 nm) + Blue (440 nm) 3 W LEDs | The grow lights |

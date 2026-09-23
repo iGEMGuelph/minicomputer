@@ -3,7 +3,7 @@
    Grow-light controller firmware                                  v0.2.0
    ---------------------------------------------------------------------------
    Matches the Prototype Schematic V1.0 (updated 2026-07-08):
-   Arduino Nano ESP32 + 2 LED drivers (red/blue) + 2 low-side MOSFETs + DS3231 RTC.
+   Arduino GIGA R1 WiFi + 2 LED drivers (red/blue) + 2 low-side MOSFETs + DS3231 RTC.
 
    WHAT THIS DOES (exactly the confirmed "Must/Should" hardware stories):
      * Turns the RED and BLUE LED channels on/off on a daily schedule (RTC).
@@ -23,7 +23,7 @@
        power-up and while the code is being uploaded.
      * On boot, the code explicitly sets both lights to OFF before anything else.
 
-   BOARD:      Arduino Nano ESP32
+   BOARD:      Arduino GIGA R1 WiFi
    LIBRARIES:  RTClib by Adafruit  (Arduino IDE -> Library Manager)
    SETTINGS:   edit config.h (pins, brightness, schedule).
    =========================================================================== */
@@ -34,14 +34,8 @@
 #include <Wire.h>
 #include <RTClib.h>
 
-static const int   PWM_MAX  = (1 << PWM_RES_BITS) - 1;   // 8 bits -> 255
+static const int   PWM_MAX  = 255;   // GIGA R1 analogWrite() is a fixed 8-bit duty cycle
 static const char* VERSION  = "0.2.0";
-
-// This board's installed arduino-esp32 core only has the old channel-based
-// LEDC API (ledcSetup/ledcAttachPin/ledcWrite-by-channel), not the newer
-// pin-based ledcAttach()/ledcWrite(pin, ...). Each colour gets its own channel.
-static const int RED_LED_CHANNEL  = 0;
-static const int BLUE_LED_CHANNEL = 1;
 
 RTC_DS3231 rtc;
 bool  rtcOk = false;                 // true if the DS3231 clock was found
@@ -67,8 +61,8 @@ unsigned long lastUpdate = 0;
 void applyOutputs(int redPct, int bluePct) {
   redPct  = constrain(redPct,  0, 100);
   bluePct = constrain(bluePct, 0, 100);
-  ledcWrite(RED_LED_CHANNEL,  map(redPct,  0, 100, 0, PWM_MAX));
-  ledcWrite(BLUE_LED_CHANNEL, map(bluePct, 0, 100, 0, PWM_MAX));
+  analogWrite(RED_LED_PIN,  map(redPct,  0, 100, 0, PWM_MAX));
+  analogWrite(BLUE_LED_PIN, map(bluePct, 0, 100, 0, PWM_MAX));
   currentRed  = redPct;
   currentBlue = bluePct;
 }
@@ -242,14 +236,14 @@ void handleSerial() {
 void cultivatorSetup() {
   // Set up PWM dimming on both colour channels, then force lights OFF.
   // (Safe default; also matches the "off by default" pulldown resistors.)
-  ledcSetup(RED_LED_CHANNEL,  PWM_FREQ, PWM_RES_BITS);
-  ledcAttachPin(RED_LED_PIN,  RED_LED_CHANNEL);
-  ledcSetup(BLUE_LED_CHANNEL, PWM_FREQ, PWM_RES_BITS);
-  ledcAttachPin(BLUE_LED_PIN, BLUE_LED_CHANNEL);
+  pinMode(RED_LED_PIN,  OUTPUT);
+  pinMode(BLUE_LED_PIN, OUTPUT);
   applyOutputs(0, 0);
 
   // Find the clock. If missing, AUTO holds the lights off and warns.
-  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+  // GIGA R1's dedicated SDA/SCL pins are fixed in hardware, so Wire.begin()
+  // takes no pin arguments (unlike the ESP32, which could remap them).
+  Wire.begin();
   rtcOk = rtc.begin();
   if (rtcOk && rtc.lostPower()) {
     // Clock lost its time (dead battery / first use): seed with compile time.

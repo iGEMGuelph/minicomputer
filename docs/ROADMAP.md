@@ -17,19 +17,21 @@ exists and what's next, so future team members know where to pick up.
       the lights off above a threshold. **Deliberately NOT faked in software**
       (e.g. using the clock chip's internal temperature would be misleading).
 - [ ] **Auto-restart / watchdog** for 24/7 stability (an "Engineer/Should"
-      story) — ESP32 task watchdog. Left out for now to avoid shipping a
-      version-sensitive feature that can't be tested before hardware exists.
+      story) — a hardware watchdog timer (mbed's `Watchdog` class on the GIGA
+      R1). Left out for now to avoid shipping a version-sensitive feature that
+      can't be tested before hardware exists.
 - [ ] Add the other two light colours from the PDF (far-red, UV-B) — same
       driver + MOSFET pattern, just two more channels
 - [ ] Save schedule/brightness settings so they survive a power cycle
-      (ESP32 "Preferences" / flash storage)
+      (flash-backed key/value storage — needs picking a library for the
+      GIGA R1's mbed core; the old ESP32 "Preferences" API doesn't apply)
 - [ ] Read the 12 V supply voltage via the "Split 12V" divider already on the
       schematic (basic power monitoring)
 
 ## Bigger (needs new hardware not yet on the board)
 - [ ] **Sensors** — water temperature, pH, CO₂, light, duckweed biomass,
       aeration/turbidity. None are wired yet; each needs its own sensor part.
-- [ ] **WiFi + data upload** — the Arduino Nano ESP32 has WiFi built in. Send
+- [ ] **WiFi + data upload** — the Arduino GIGA R1 WiFi has WiFi built in. Send
       readings to a database/dashboard (the PDF's "API calls" idea).
 - [ ] **App / dashboard** — templated crop profiles, alerts, historical
       metrics, saved/favourited settings. This is a separate software project.

@@ -16,13 +16,12 @@
 //  single source of truth. If the team wires to different pins, just change the
 //  numbers here to match — nothing else needs to change.)
 //
-// Use the pin LABELS printed on the Arduino Nano ESP32 board.
+// Use the pin LABELS printed on the Arduino GIGA R1 WiFi board.
 
 #define BLUE_LED_PIN   D2      // -> BLUE MOSFET gate (through its 220 ohm resistor)
 #define RED_LED_PIN    D3      // -> RED  MOSFET gate (through its 220 ohm resistor)
-#define I2C_SDA_PIN    A4      // -> RTC clock  SDA
-#define I2C_SCL_PIN    A5      // -> RTC clock  SCL
-// RTC also needs: VCC -> 3V3,  GND -> GND (common ground).
+// RTC clock uses the board's dedicated SDA/SCL pins (fixed in hardware, not
+// remappable like on the ESP32) plus VCC -> 3V3, GND -> GND (common ground).
 
 // ===========================================================================
 // 2) DAYTIME BRIGHTNESS  —  brightness used automatically during the ON window
@@ -44,8 +43,6 @@
 // ===========================================================================
 // 4) ADVANCED  —  rarely changed
 // ===========================================================================
-#define PWM_FREQ            5000   // dimming frequency in Hz (flicker-free, silent)
-#define PWM_RES_BITS        8      // 8-bit dimming = 256 brightness steps
 #define UPDATE_INTERVAL_MS  1000   // how often the schedule is re-checked (ms)
 
 #endif  // CONFIG_H

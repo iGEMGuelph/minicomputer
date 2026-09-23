@@ -34,7 +34,7 @@ must match the code. If you follow nothing else carefully, follow that.
 Put these on the table and tick them off. If something is missing, stop and get
 it before wiring.
 
-- [ ] Arduino Nano ESP32 (the "brain")
+- [ ] Arduino GIGA R1 WiFi (the "brain")
 - [ ] 12 V DC supply + its connector (the `KH-GX20-2P`)
 - [ ] Blue LED driver (700 mA) + Blue LED (440 nm, 3 W)
 - [ ] Red LED driver (700 mA) + Red LED (660 nm, 3 W)
@@ -93,7 +93,7 @@ Do this once for **blue**, then again for **red**, using your schematic as the m
 ### 🧱 Step 2 — Connect the two control wires to the Arduino
 
 ⭐ **This is the most important step. These pins must match the code exactly.**
-Use the pin **labels printed on the Arduino Nano ESP32 board.**
+Use the pin **labels printed on the Arduino GIGA R1 WiFi board.**
 
 | Wire (from the 220 Ω on the gate) | Goes to Arduino pin |
 |-----------------------------------|:-------------------:|
@@ -111,10 +111,13 @@ The DS3231 clock module has 4 pins. Wire each one to the Arduino:
 
 | Clock pin | Goes to Arduino pin |
 |-----------|:-------------------:|
-| `SDA`     | **`A4`**            |
-| `SCL`     | **`A5`**            |
+| `SDA`     | **`SDA`**           |
+| `SCL`     | **`SCL`**           |
 | `VCC`     | **`3V3`**  (powers the clock) |
 | `GND`     | **`GND`**           |
+
+(The GIGA R1's `SDA`/`SCL` pins are fixed in hardware with built-in pull-ups —
+unlike the old ESP32 board, they can't be remapped to other pins.)
 
 ✅ **Check:** four wires between the clock and the Arduino, matching the table.
 
@@ -156,14 +159,14 @@ The Arduino runs on **5 V**, which is completely separate from the 12 V lights.
 - [ ] Both light chains built by copying the schematic (Step 1)
 - [ ] Blue gate → **`D2`** (Step 2)
 - [ ] Red gate → **`D3`** (Step 2)
-- [ ] Clock: `SDA`→**`A4`**, `SCL`→**`A5`**, `VCC`→**`3V3`**, `GND`→**`GND`** (Step 3)
+- [ ] Clock: `SDA`→**`SDA`**, `SCL`→**`SCL`**, `VCC`→**`3V3`**, `GND`→**`GND`** (Step 3)
 - [ ] **All grounds joined** at one common point (Step 4)
 - [ ] USB-C ready, **12 V still unplugged** (Step 5)
 
-> 🔁 **If you had to use different pins** than `D2`/`D3`/`A4`/`A5`, that's OK — the
-> pins are set in one file, `firmware/cultivator/config.h`, and it's a 4-line
+> 🔁 **If you had to use different pins** than `D2`/`D3`, that's OK — the
+> pins are set in one file, `firmware/cultivator/config.h`, and it's a 2-line
 > change. Just write down which pins you actually used and pass that along before
-> the code is uploaded.
+> the code is uploaded. (`SDA`/`SCL` are fixed in hardware and can't be moved.)
 
 ---
 
@@ -199,8 +202,8 @@ Once it's wired, the code goes onto the board from a laptop using the free
 **Arduino IDE**:
 
 1. Install the **Arduino IDE** (arduino.cc/en/software).
-2. In the IDE, add the **Arduino Nano ESP32** board and the **RTClib** library
-   (both through the IDE's built-in installers — Boards Manager and Library
+2. In the IDE, add the **Arduino GIGA R1 WiFi** board (via **Arduino Mbed OS
+   GIGA Boards** in Boards Manager) and the **RTClib** library (via Library
    Manager).
 3. Open `firmware/cultivator/cultivator.ino`, plug the board in over USB, pick
    the board/port, and click **Upload**.
