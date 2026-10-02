@@ -67,13 +67,13 @@ void apiLoop() {
     Serial.print(WiFi.localIP());
     Serial.println(F("/api/status"));
   } else if (!wifiUp && serverRunning) {
-    server.stop();
+    server.end();
     serverRunning = false;
     Serial.println(F("API stopped (WiFi down)."));
   }
 
   if (serverRunning) {
-    WiFiClient client = server.available();
+    WiFiClient client = server.accept();
     if (client) serveClient(client);
   }
 }

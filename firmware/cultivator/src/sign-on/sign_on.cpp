@@ -96,7 +96,7 @@ void signOnLoop() {
   switch (linkState) {
 
     case LINK_CONNECTING: {
-      wl_status_t status = WiFi.status();
+      uint8_t status = WiFi.status();   // WiFi.status() returns uint8_t on this core, not wl_status_t
       if (status == WL_CONNECTED) {
         linkState = LINK_AUTHENTICATED;
         printAuthResult(true);
