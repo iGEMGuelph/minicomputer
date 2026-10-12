@@ -75,6 +75,11 @@ mode.
 |----------|--------|---------|-------|-------|
 | `/api/status` | `GET` | `src/api/api.cpp` `handleStatus()` | `{"device":"cultivator","readOnly":false}` | `readOnly` is the current `READ_ONLY` flag. Any other path or method returns 404. |
 
+- **Authentication:** every request must send the header
+  `X-Device-Key: <DEVICE_SHARED_KEY>`. Requests with a missing or wrong key get
+  `401 Unauthorized` before any routing. The key is `#define DEVICE_SHARED_KEY`
+  in `secrets.h` (the build stops with an error if it's missing) and must match
+  `DEVICE_SHARED_KEY` in the dashboard backend.
 - **What read-only means:** the dashboard can still show what the cultivator
   reports, but must not send it changes. Nothing on the board enforces the flag
   yet; it is only reported.

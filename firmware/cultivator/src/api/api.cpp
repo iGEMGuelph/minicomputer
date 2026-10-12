@@ -18,10 +18,15 @@
 #ifndef READ_ONLY_MODE
 #error "secrets.h must define READ_ONLY_MODE as true or false"
 #endif
+#ifndef DEVICE_SHARED_KEY
+#error "secrets.h must define DEVICE_SHARED_KEY (the API auth key)"
+#endif
 
 // --- Settings ---------------------------------------------------------------
 #define API_SERVER_PORT    80            // plain HTTP, so URLs need no port
 #define API_DEVICE_NAME    "cultivator"  // lets the backend check it reached us
+#define API_KEY_HEADER     "X-Device-Key" // request header carrying DEVICE_SHARED_KEY
+#define API_MAX_HEADERS    32            // stop reading after this many header lines
 
 // Fixed at build time; only changes by editing secrets.h and re-flashing.
 static const bool READ_ONLY = READ_ONLY_MODE;
@@ -29,14 +34,55 @@ static const bool READ_ONLY = READ_ONLY_MODE;
 static WiFiServer server(API_SERVER_PORT);
 static bool serverRunning = false;
 
-// Serves one client: reads just the request line, replies to GET /api/status
-// with e.g. {"device":"cultivator","readOnly":true}, otherwise 404.
+// Compares every character regardless of where the first mismatch is, so
+// response timing doesn't reveal how much of a guessed key was right.
+static bool keyMatches(const String& given) {
+  const char* expected = DEVICE_SHARED_KEY;
+  size_t expectedLen = strlen(expected);
+  uint8_t diff = (given.length() == expectedLen) ? 0 : 1;
+  for (size_t i = 0; i < expectedLen; i++) {
+    char c = (i < given.length()) ? given[i] : 0;
+    diff |= c ^ expected[i];
+  }
+  return diff == 0;
+}
+
+// Reads header lines up to the blank line; returns true if one of them is
+// API_KEY_HEADER with the right key. Header names are case-insensitive.
+static bool readHeadersAndCheckKey(WiFiClient& client) {
+  bool authorized = false;
+  for (int i = 0; i < API_MAX_HEADERS; i++) {
+    String line = client.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) break;   // end of headers
+
+    int colon = line.indexOf(':');
+    if (colon < 0) continue;
+    String name = line.substring(0, colon);
+    name.trim();
+    if (name.equalsIgnoreCase(API_KEY_HEADER)) {
+      String value = line.substring(colon + 1);
+      value.trim();
+      authorized = keyMatches(value);
+    }
+  }
+  return authorized;
+}
+
+// Serves one client: replies to GET /api/status with e.g.
+// {"device":"cultivator","readOnly":true}, otherwise 404. Every request must
+// carry API_KEY_HEADER: DEVICE_SHARED_KEY, or it gets 401 before routing.
 static void serveClient(WiFiClient& client) {
   String requestLine = client.readStringUntil('\n');
-  // Drain the rest of the request (headers/body) so the client sees a clean close.
+  bool authorized = readHeadersAndCheckKey(client);
+  // Drain anything left (e.g. a body) so the client sees a clean close.
   while (client.connected() && client.available()) client.read();
 
-  if (requestLine.startsWith("GET /api/status")) {
+  if (!authorized) {
+    client.println(F("HTTP/1.1 401 Unauthorized"));
+    client.println(F("Connection: close"));
+    client.println();
+  } else if (requestLine.startsWith("GET /api/status")) {
     String body = String("{\"device\":\"") + API_DEVICE_NAME +
                   "\",\"readOnly\":" + (READ_ONLY ? "true" : "false") + "}";
     client.println(F("HTTP/1.1 200 OK"));

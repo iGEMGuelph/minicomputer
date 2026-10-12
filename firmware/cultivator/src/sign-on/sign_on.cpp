@@ -37,7 +37,17 @@ void startConnect(NetworkMode mode) {
   if (mode == NET_PRIVATE) {
     Serial.println(F("Starting private WiFi sign-on..."));
     Serial.print  (F("  SSID: ")); Serial.println(NOAH_IDENTITY);
-    WiFi.begin(NOAH_IDENTITY, NOAH_PASSWORD);
+    // On the GIGA, begin() blocks: it scans, and fails immediately if the
+    // SSID isn't visible. List what the radio can see so failures are diagnosable.
+    int found = WiFi.scanNetworks();
+    Serial.print(F("  Scan found ")); Serial.print(found); Serial.println(F(" networks:"));
+    for (int i = 0; i < found; i++) {
+      Serial.print(F("    ")); Serial.print(WiFi.SSID(i));
+      Serial.print(F("  (")); Serial.print(WiFi.RSSI(i)); Serial.println(F(" dBm)"));
+    }
+    int result = WiFi.begin(NOAH_IDENTITY, NOAH_PASSWORD);
+    Serial.print(F("  WiFi.begin() returned ")); Serial.print(result);
+    Serial.println(result == WL_CONNECTED ? F(" (connected)") : F(" (failed)"));
     connectStartedAt = millis();
     linkState = LINK_CONNECTING;
   } else {
