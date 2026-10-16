@@ -1,10 +1,8 @@
 /* ===========================================================================
-   api.cpp  —  READ_ONLY flag + the small web server the dashboard talks to
+   api.cpp  —  the small web server the dashboard talks to
    ---------------------------------------------------------------------------
-   The dashboard backend sends GET /api/status; we reply with the device name
-   and the READ_ONLY state. READ_ONLY is fixed at build time from secrets.h
-   (READ_ONLY_MODE): change it by editing that file and re-flashing, never at
-   runtime or over the network.
+   The dashboard backend sends GET /api/status to check the board is online;
+   we reply with the device name.
 
    The ESP32 core's WebServer.h doesn't exist on the GIGA R1 (mbed core), so
    this parses the one request line it needs by hand on top of WiFiServer /
@@ -13,11 +11,8 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include "../sign-on/secrets.h"   // WiFi login + READ_ONLY_MODE (git-ignored)
+#include "../sign-on/secrets.h"   // WiFi login + DEVICE_SHARED_KEY (git-ignored)
 
-#ifndef READ_ONLY_MODE
-#error "secrets.h must define READ_ONLY_MODE as true or false"
-#endif
 #ifndef DEVICE_SHARED_KEY
 #error "secrets.h must define DEVICE_SHARED_KEY (the API auth key)"
 #endif
@@ -27,9 +22,6 @@
 #define API_DEVICE_NAME    "cultivator"  // lets the backend check it reached us
 #define API_KEY_HEADER     "X-Device-Key" // request header carrying DEVICE_SHARED_KEY
 #define API_MAX_HEADERS    32            // stop reading after this many header lines
-
-// Fixed at build time; only changes by editing secrets.h and re-flashing.
-static const bool READ_ONLY = READ_ONLY_MODE;
 
 static WiFiServer server(API_SERVER_PORT);
 static bool serverRunning = false;
@@ -70,7 +62,7 @@ static bool readHeadersAndCheckKey(WiFiClient& client) {
 }
 
 // Serves one client: replies to GET /api/status with e.g.
-// {"device":"cultivator","readOnly":true}, otherwise 404. Every request must
+// {"device":"cultivator"}, otherwise 404. Every request must
 // carry API_KEY_HEADER: DEVICE_SHARED_KEY, or it gets 401 before routing.
 static void serveClient(WiFiClient& client) {
   String requestLine = client.readStringUntil('\n');
@@ -83,8 +75,7 @@ static void serveClient(WiFiClient& client) {
     client.println(F("Connection: close"));
     client.println();
   } else if (requestLine.startsWith("GET /api/status")) {
-    String body = String("{\"device\":\"") + API_DEVICE_NAME +
-                  "\",\"readOnly\":" + (READ_ONLY ? "true" : "false") + "}";
+    String body = String("{\"device\":\"") + API_DEVICE_NAME + "\"}";
     client.println(F("HTTP/1.1 200 OK"));
     client.println(F("Content-Type: application/json"));
     client.print  (F("Content-Length: ")); client.println(body.length());

@@ -4,7 +4,7 @@
    Runs these modules side by side on one board:
      * cultivator  (src/cultivator/) — grow-light schedule/dimming, RTC, Serial menu
      * sign-on     (src/sign-on/)    — eduroam WPA2-Enterprise connect + auth test
-     * api         (src/api/)        — READ_ONLY flag + web server for the dashboard
+     * api         (src/api/)        — web server for the dashboard
 
    Each module keeps its own setup/loop pair (cultivatorSetup/cultivatorLoop,
    signOnSetup/signOnLoop, apiSetup/apiLoop) instead of the Arduino setup()/loop() — this file is

@@ -39,7 +39,7 @@ minicomputer/
 │       ├── schedule.h           the daily on/off time logic (kept separate, plain C++)
 │       └── src/
 │           └── api/
-│               └── api.cpp      READ_ONLY flag + web server (GET /api/status)
+│               └── api.cpp      web server (GET /api/status)
 ├── docs/
 │   ├── BUILD_GUIDE.md           step-by-step wiring guide (plain, beginner-friendly)
 │   ├── ROADMAP.md               what comes next (temp sensor, WiFi, app)
@@ -68,25 +68,17 @@ Full details and wiring: [`docs/BUILD_GUIDE.md`](docs/BUILD_GUIDE.md).
 ## API (for the dashboard)
 
 Once the board is on WiFi it runs a small web server (port 80). The dashboard's
-backend calls it to check whether the cultivator is online and in **read-only**
-mode.
+backend calls it to check whether the cultivator is online.
 
 | Endpoint | Method | Handler | Reply | Notes |
 |----------|--------|---------|-------|-------|
-| `/api/status` | `GET` | `src/api/api.cpp` `handleStatus()` | `{"device":"cultivator","readOnly":false}` | `readOnly` is the current `READ_ONLY` flag. Any other path or method returns 404. |
+| `/api/status` | `GET` | `src/api/api.cpp` `serveClient()` | `{"device":"cultivator"}` | Any other path or method returns 404. |
 
 - **Authentication:** every request must send the header
   `X-Device-Key: <DEVICE_SHARED_KEY>`. Requests with a missing or wrong key get
   `401 Unauthorized` before any routing. The key is `#define DEVICE_SHARED_KEY`
   in `secrets.h` (the build stops with an error if it's missing) and must match
   `DEVICE_SHARED_KEY` in the dashboard backend.
-- **What read-only means:** the dashboard can still show what the cultivator
-  reports, but must not send it changes. Nothing on the board enforces the flag
-  yet; it is only reported.
-- **Changing it:** set `#define READ_ONLY_MODE true` (or `false`) in `secrets.h`
-  and re-flash. It is fixed at build time, so it survives restarts and cannot be
-  changed at runtime or over the network. If `secrets.h` doesn't define it, the
-  build stops with an error.
 - **Finding the address:** once WiFi connects, the Serial Monitor prints
   `API listening: http://<ip>/api/status`. Set that address as `MINICOMPUTER_URL`
   in the dashboard repo's `backend/config.py`.
