@@ -2,7 +2,10 @@
    api.cpp  —  the small web server the dashboard talks to
    ---------------------------------------------------------------------------
    The dashboard backend sends GET /api/status to check the board is online;
-   we reply with the device name.
+   we reply with the device name and whether it is read-only (lights in
+   MANUAL mode at the serial console, so the dashboard isn't in charge).
+   Everything else (light levels, readings) the board sends OUT itself: see
+   src/backend/.
 
    The ESP32 core's WebServer.h doesn't exist on the GIGA R1 (mbed core), so
    this parses the one request line it needs by hand on top of WiFiServer /
@@ -12,6 +15,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include "../sign-on/secrets.h"   // WiFi login + DEVICE_SHARED_KEY (git-ignored)
+#include "../cultivator/cultivator.h"
 
 #ifndef DEVICE_SHARED_KEY
 #error "secrets.h must define DEVICE_SHARED_KEY (the API auth key)"
@@ -62,7 +66,7 @@ static bool readHeadersAndCheckKey(WiFiClient& client) {
 }
 
 // Serves one client: replies to GET /api/status with e.g.
-// {"device":"cultivator"}, otherwise 404. Every request must
+// {"device":"cultivator","readOnly":false}, otherwise 404. Every request must
 // carry API_KEY_HEADER: DEVICE_SHARED_KEY, or it gets 401 before routing.
 static void serveClient(WiFiClient& client) {
   String requestLine = client.readStringUntil('\n');
@@ -75,7 +79,9 @@ static void serveClient(WiFiClient& client) {
     client.println(F("Connection: close"));
     client.println();
   } else if (requestLine.startsWith("GET /api/status")) {
-    String body = String("{\"device\":\"") + API_DEVICE_NAME + "\"}";
+    bool readOnly = (currentMode() == MODE_MANUAL);
+    String body = String("{\"device\":\"") + API_DEVICE_NAME +
+                  "\",\"readOnly\":" + (readOnly ? "true" : "false") + "}";
     client.println(F("HTTP/1.1 200 OK"));
     client.println(F("Content-Type: application/json"));
     client.print  (F("Content-Length: ")); client.println(body.length());

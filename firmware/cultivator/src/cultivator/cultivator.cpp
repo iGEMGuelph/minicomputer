@@ -12,7 +12,8 @@
 
    WHAT THIS DOES NOT DO (on purpose — hardware isn't there / it's future work):
      * No temperature cutoff  (no temperature sensor exists on this board).
-     * No WiFi / app upload    (software feature for later).
+     * WiFi / dashboard sync lives in src/backend/; this module only exposes
+       the light state to it (cultivator.h).
      * No sensors (pH/CO2/etc).
      See docs/ROADMAP.md.
 
@@ -31,6 +32,7 @@
 #include <Arduino.h>
 #include "config.h"
 #include "schedule.h"
+#include "cultivator.h"
 #include <Wire.h>
 #include <RTClib.h>
 
@@ -40,11 +42,13 @@ static const char* VERSION  = "0.2.0";
 RTC_DS3231 rtc;
 bool  rtcOk = false;                 // true if the DS3231 clock was found
 
-enum Mode { MODE_AUTO, MODE_MANUAL };
-Mode  mode = MODE_AUTO;              // AUTO = follow schedule, MANUAL = hold fixed levels
+Mode  mode = MODE_AUTO;              // see cultivator.h for what each mode does
 
 int   manualRed  = 0;                // brightness used in MANUAL mode (%)
 int   manualBlue = 0;
+
+int   remoteRed  = 0;                // brightness the dashboard asked for (REMOTE mode)
+int   remoteBlue = 0;
 
 int   schedOnMin  = SCHEDULE_ON_HOUR  * 60;   // schedule as minutes-into-day
 int   schedOffMin = SCHEDULE_OFF_HOUR * 60;
@@ -81,6 +85,10 @@ void update() {
     applyOutputs(manualRed, manualBlue);
     return;
   }
+  if (mode == MODE_REMOTE) {
+    applyOutputs(remoteRed, remoteBlue);
+    return;
+  }
   // AUTO: follow the daily schedule. Requires the RTC to know the time.
   if (!rtcOk) {
     if (!warnedNoRtc) {
@@ -93,6 +101,42 @@ void update() {
   }
   bool day = isDaytimeMinutes(nowMinutes(), schedOnMin, schedOffMin);
   applyOutputs(day ? RED_DAY_PCT : 0, day ? BLUE_DAY_PCT : 0);
+}
+
+// ===========================================================================
+// PUBLIC INTERFACE  —  used by the api and backend modules (cultivator.h)
+// ===========================================================================
+Mode currentMode() { return mode; }
+
+const char* modeName(Mode m) {
+  switch (m) {
+    case MODE_MANUAL: return "manual";
+    case MODE_REMOTE: return "remote";
+    default:          return "auto";
+  }
+}
+
+void setMode(Mode m) {
+  mode = m;
+  warnedNoRtc = false;
+  update();
+}
+
+int lightRed()  { return currentRed; }
+int lightBlue() { return currentBlue; }
+
+void setRemoteLevels(int redPct, int bluePct) {
+  remoteRed  = constrain(redPct,  0, 100);
+  remoteBlue = constrain(bluePct, 0, 100);
+  if (mode == MODE_REMOTE) update();
+}
+
+bool rtcPresent() { return rtcOk; }
+
+bool cultivatorNow(DateTime& out) {
+  if (!rtcOk) return false;
+  out = rtc.now();
+  return true;
 }
 
 // ===========================================================================
@@ -120,6 +164,7 @@ void printHelp() {
   Serial.println(F("  off                  both colours off (manual)"));
   Serial.println(F("  auto                 resume the daily schedule"));
   Serial.println(F("  manual               hold current brightness, ignore schedule"));
+  Serial.println(F("  remote               follow the dashboard's sliders"));
   Serial.println(F("  schedule <on> <off>  set ON and OFF hours, 0-23"));
   Serial.println(F("  settime Y M D h m s  set the clock, e.g. settime 2026 7 9 14 30 0"));
   Serial.println(F("  gettime              show the clock time"));
@@ -127,7 +172,8 @@ void printHelp() {
 
 void printStatus() {
   Serial.println(F("---- STATUS ----"));
-  Serial.print(F("  mode      : ")); Serial.println(mode == MODE_AUTO ? F("AUTO (schedule)") : F("MANUAL"));
+  Serial.print(F("  mode      : ")); Serial.println(mode == MODE_AUTO   ? F("AUTO (schedule)") :
+                                                         mode == MODE_REMOTE ? F("REMOTE (dashboard)") : F("MANUAL"));
   Serial.print(F("  schedule  : ON ")); Serial.print(schedOnMin / 60);
   Serial.print(F(":00  OFF ")); Serial.print(schedOffMin / 60); Serial.println(F(":00"));
   if (rtcOk) {
@@ -186,6 +232,9 @@ void processCommand(String line) {
   } else if (cmd == "manual") {
     mode = MODE_MANUAL; manualRed = currentRed; manualBlue = currentBlue;
     Serial.println(F("MANUAL mode - holding current brightness"));
+  } else if (cmd == "remote") {
+    setMode(MODE_REMOTE);
+    Serial.println(F("REMOTE mode - following the dashboard"));
   } else if (cmd == "schedule" && n >= 3) {
     int on  = constrain(tok[1].toInt(), 0, 23);
     int off = constrain(tok[2].toInt(), 0, 23);
